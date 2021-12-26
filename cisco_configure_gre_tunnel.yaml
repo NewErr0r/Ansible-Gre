@@ -1,0 +1,196 @@
+---
+  - name: Configure R1
+    hosts: R1
+    gather_facts: no
+
+    tasks:
+      - name: get interface Tunnel 0
+        ios_config:
+          parents:
+            - ip route 192.168.3.0 255.255.255.0 10.10.0.2
+            - interface Tunnel 0
+          lines:
+            - tunnel mode gre ip
+            - ip address 10.10.0.1 255.255.255.0
+            - tunnel source 81.77.94.46
+            - tunnel destination 81.77.94.50
+
+  - name: Configure R2
+    hosts: R2
+    gather_facts: no
+
+    tasks:
+      - name: get interface Tunnel 0
+        ios_config:
+          parents:
+            - ip route 192.168.1.0 255.255.255.0 10.10.0.1
+            - ip route 192.168.2.0 255.255.255.0 10.10.0.1
+            - interface Tunnel 0
+          lines:
+            - tunnel mode gre ip
+            - ip address 10.10.0.2 255.255.255.0
+            - tunnel source 81.77.94.50
+            - tunnel destination 81.77.94.46
+
+  - name: Check ping on tunnel
+    hosts: R1
+    gather_facts: no
+
+    tasks:
+      - name: ping 10.10.0.2
+        ios_command:
+          commands:
+            - ping 10.10.0.2
+        register: config
+
+      - name: save results ping
+        copy:
+          content: "##### check ping ##### \n\n
+                    {{ config.stdout [0] }} \n\n"
+          dest: "config/ping_{{ inventory_hostname }}.txt"
+
+  - name: show ip route in R1 and R2
+    hosts: R1 R2
+    gather_facts: no
+
+    tasks: 
+      - name: show ip route
+        ios_command:
+          commands:
+            - sh ip route
+        register: config
+
+      - name: save results ip route
+        copy: 
+          content: "#### ip route #### \n\n
+                    {{ config.stdout [0] }}\n\n"
+          dest: "config/ip_route_{{ inventory_hostname }}.txt"
+
+  - name: Check ping on R2
+    hosts: R2
+    gather_facts: no
+
+    tasks:
+      - name: ping R1 LAN_1 and LAN_2
+        ios_command:
+          commands:
+            - ping 192.168.1.1
+            - ping 192.168.2.1
+        register: config
+
+      - name: save results ping
+        copy:
+          content: "##### ping LAN_192.168.1.0 ##### \n\n
+                    {{ config.stdout [0] }} \n\n
+                    ##### ping LAN_192.168.2.0 ##### \n\n
+                    {{ config.stdout [1] }} \n\n"
+          dest: "config/ping_LAN_{{ inventory_hostname }}.txt"
+
+  - name: configure IPSec on R1
+    hosts: R1
+    gather_facts: no
+
+    tasks:
+      - name: ISAKMP Pashe 1
+        ios_config:
+          parents: 
+            - crypto isakmp policy 1
+          lines:
+            - encr 3des
+            - hash md5
+            - authentication pre-share
+            - group 2
+            - lifetime 86400
+
+      - name: PSK and SAKMP Phache 2 Policy
+        ios_config:
+          parents: 
+            - crypto isakmp key merionet address 81.77.94.50
+            - crypto ipsec transform-set TS esp-3des esp-md5-hmac
+          lines:
+            - mode transport
+
+      - name: crypto IPSec Profile
+        ios_config:
+          parents: 
+            - crypto ipsec profile protect-gre
+          lines:
+            - set security-association lifetime seconds 86400
+            - set transform-set TS
+
+      - name: IPSec on interface Tunnel 0 
+        ios_config:
+          parents: 
+            - interface Tunnel 0
+          lines:
+            - tunnel protection ipsec profile protect-gre
+
+  - name: configure IPSec on R2
+    hosts: R2
+    gather_facts: no
+
+    tasks:
+      - name: ISAKMP Pashe 1
+        ios_config:
+          parents: 
+            - crypto isakmp policy 1
+          lines:
+            - encr 3des
+            - hash md5
+            - authentication pre-share
+            - group 2
+            - lifetime 86400
+
+      - name: PSK and SAKMP Phache 2 Policy
+        ios_config:
+          parents: 
+            - crypto isakmp key merionet address 81.77.94.46
+            - crypto ipsec transform-set TS esp-3des esp-md5-hmac
+          lines:
+            - mode transport
+
+      - name: crypto IPSec Profile
+        ios_config:
+          parents: 
+            - crypto ipsec profile protect-gre
+          lines:
+            - set security-association lifetime seconds 86400
+            - set transform-set TS
+
+      - name: IPSec on interface Tunnel 0 
+        ios_config:
+          parents: 
+            - interface Tunnel 0
+          lines:
+            - tunnel protection ipsec profile protect-gre
+
+  - name: Check IPSec 
+    hosts: R1
+    gather_facts: no
+
+    tasks:
+      - name: show crypto session
+        ios_command:
+          commands:
+            - ping 192.168.3.1
+            - show crypto session
+        register: config
+
+      - name: save results crypro session
+        copy:
+          content: "##### show crypto session ##### \n\n
+                    {{ config.stdout [1] }} \n\n"
+          dest: "config/IPSec_{{ inventory_hostname }}.txt"
+
+      - name: traceroute tunnel 
+        ios_command:
+          commands:
+            - traceroute 192.168.3.1
+        register: config
+
+      - name: save results traceroute
+        copy:
+          content: "##### traseroute R1_192.168.3.1 ##### \n\n
+                    {{ config.stdout [0] }} \n\n"
+          dest: "config/Traceroute_{{ inventory_hostname }}.txt"
+

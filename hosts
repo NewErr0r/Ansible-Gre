@@ -1,0 +1,10 @@
+[ios]
+ISP ansible_host=10.10.10.1
+R1 ansible_host=81.77.94.46
+R2 ansible_host=81.77.94.50
+
+[ios:vars]
+ansible_user=admin
+ansible_password=cisco
+ansible_connection=network_cli
+ansible_network_os=ios
